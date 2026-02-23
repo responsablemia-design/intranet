@@ -1,0 +1,33 @@
+// Prisma schema - Intranet IES Félix de Azara
+// Docs: https://www.prisma.io/docs/reference/api-reference/prisma-schema-reference
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Roles del sistema ─────────────────────────────────────────────────────────
+enum Role {
+  ADMIN        // Equipo directivo / administrador TIC
+  PROFESOR     // Profesorado
+  ALUMNO       // Alumnado (acceso limitado)
+}
+
+// ── Usuarios ──────────────────────────────────────────────────────────────────
+model User {
+  id            String   @id @default(cuid())
+  googleId      String   @unique
+  email         String   @unique
+  name          String
+  avatar        String?
+  role          Role     @default(PROFESOR)
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("users")
+}
