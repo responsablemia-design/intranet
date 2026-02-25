@@ -9,15 +9,15 @@ const incidenciaSelect = {
   id: true,
   titulo: true,
   descripcion: true,
-  categoria: true,
   estado: true,
   prioridad: true,
-  ubicacion: true,
   createdAt: true,
   updatedAt: true,
   resolvedAt: true,
-  autor: { select: { id: true, name: true, email: true, avatar: true } },
-  asignado: { select: { id: true, name: true, email: true, avatar: true } },
+  espacio: { select: { id: true, codigo: true, nombre: true, planta: true, tipo: true } },
+  equipo:  { select: { id: true, nombre: true, tipo: true } },
+  autor:   { select: { id: true, name: true, email: true, avatar: true } },
+  asignado:{ select: { id: true, name: true, email: true, avatar: true } },
   comentarios: {
     select: {
       id: true, contenido: true, createdAt: true,
@@ -32,17 +32,12 @@ export async function incidenciasRoutes(app: FastifyInstance) {
   // ── Listar incidencias ────────────────────────────────────────────────────
   app.get('/', { preHandler: requireAuth }, async (req, reply) => {
     const user = (req as any).currentUser
-    const { estado, categoria, asignadoId, page = '1', limit = '20' } = req.query as Record<string, string>
+    const { estado, espacioId, page = '1', limit = '20' } = req.query as Record<string, string>
 
     const where: any = {}
     if (estado) where.estado = estado
-    if (categoria) where.categoria = categoria
-    if (asignadoId) where.asignadoId = asignadoId
-
-    // Los no-admin solo ven sus propias incidencias salvo que sean TIC (ADMIN ve todo)
-    if (user.role !== 'ADMIN') {
-      where.autorId = user.id
-    }
+    if (espacioId) where.espacioId = espacioId
+    if (user.role !== 'ADMIN') where.autorId = user.id
 
     const skip = (parseInt(page) - 1) * parseInt(limit)
     const [incidencias, total] = await Promise.all([
@@ -67,7 +62,6 @@ export async function incidenciasRoutes(app: FastifyInstance) {
     const incidencia = await prisma.incidencia.findUnique({ where: { id }, select: incidenciaSelect })
     if (!incidencia) return reply.code(404).send({ error: 'Incidencia no encontrada' })
 
-    // Solo el autor o un admin puede ver los detalles
     if (user.role !== 'ADMIN' && incidencia.autor.id !== user.id) {
       return reply.code(403).send({ error: 'Acceso denegado' })
     }
@@ -78,25 +72,32 @@ export async function incidenciasRoutes(app: FastifyInstance) {
   // ── Crear incidencia ──────────────────────────────────────────────────────
   app.post('/', { preHandler: requireAuth }, async (req, reply) => {
     const user = (req as any).currentUser
-    const { titulo, descripcion, categoria, prioridad = 'MEDIA', ubicacion } = req.body as {
+    const { titulo, descripcion, espacioId, equipoId, prioridad = 'MEDIA' } = req.body as {
       titulo: string
       descripcion: string
-      categoria: 'TIC' | 'AULA'
+      espacioId: string
+      equipoId?: string
       prioridad?: string
-      ubicacion?: string
     }
 
-    if (!titulo || !descripcion || !categoria) {
-      return reply.code(400).send({ error: 'Faltan campos obligatorios: titulo, descripcion, categoria' })
+    if (!titulo || !descripcion || !espacioId) {
+      return reply.code(400).send({ error: 'Faltan campos: titulo, descripcion, espacioId' })
     }
 
     const incidencia = await prisma.incidencia.create({
-      data: { titulo, descripcion, categoria, prioridad: prioridad as any, ubicacion, autorId: user.id },
+      data: {
+        titulo,
+        descripcion,
+        prioridad: prioridad as any,
+        espacioId,
+        equipoId: equipoId || null,
+        autorId: user.id
+      },
       select: incidenciaSelect,
     })
 
-    // Notificar a los admins de la nueva incidencia
-    const admins = await prisma.user.findMany({ where: { role: 'ADMIN', active: true }, select: { email: true, name: true } })
+    // Notificar a los admins
+    const admins = await prisma.user.findMany({ where: { role: 'ADMIN', active: true } })
     for (const admin of admins) {
       await sendEmail({
         to: admin.email,
@@ -104,9 +105,9 @@ export async function incidenciasRoutes(app: FastifyInstance) {
         html: `
           <h2>Nueva incidencia registrada</h2>
           <p><strong>Título:</strong> ${titulo}</p>
-          <p><strong>Categoría:</strong> ${categoria}</p>
+          <p><strong>Espacio:</strong> ${incidencia.espacio.nombre}</p>
+          ${incidencia.equipo ? `<p><strong>Equipo:</strong> ${incidencia.equipo.nombre}</p>` : ''}
           <p><strong>Prioridad:</strong> ${prioridad}</p>
-          <p><strong>Ubicación:</strong> ${ubicacion ?? 'No especificada'}</p>
           <p><strong>Descripción:</strong> ${descripcion}</p>
           <p><strong>Registrada por:</strong> ${user.name} (${user.email})</p>
           <hr>
@@ -118,22 +119,18 @@ export async function incidenciasRoutes(app: FastifyInstance) {
     return reply.code(201).send(incidencia)
   })
 
-  // ── Actualizar estado / asignación ────────────────────────────────────────
+  // ── Actualizar estado / asignación (solo admin) ───────────────────────────
   app.patch('/:id', { preHandler: requireAdmin }, async (req, reply) => {
     const { id } = req.params as { id: string }
-    const { estado, asignadoId, prioridad } = req.body as {
-      estado?: string
-      asignadoId?: string
-      prioridad?: string
-    }
+    const { estado, asignadoId, prioridad } = req.body as any
 
     const incidencia = await prisma.incidencia.findUnique({ where: { id }, select: incidenciaSelect })
     if (!incidencia) return reply.code(404).send({ error: 'Incidencia no encontrada' })
 
     const data: any = {}
-    if (estado) data.estado = estado
-    if (asignadoId !== undefined) data.asignadoId = asignadoId || null
+    if (estado)   data.estado = estado
     if (prioridad) data.prioridad = prioridad
+    if (asignadoId !== undefined) data.asignadoId = asignadoId || null
     if (estado === 'RESUELTA' && incidencia.estado !== 'RESUELTA') data.resolvedAt = new Date()
     if (estado && estado !== 'RESUELTA') data.resolvedAt = null
 
@@ -171,7 +168,7 @@ export async function incidenciasRoutes(app: FastifyInstance) {
 
     const incidencia = await prisma.incidencia.findUnique({
       where: { id },
-      select: { id: true, titulo: true, autor: { select: { email: true, name: true } } }
+      select: { id: true, titulo: true, autor: { select: { email: true } } }
     })
     if (!incidencia) return reply.code(404).send({ error: 'Incidencia no encontrada' })
 
@@ -183,11 +180,10 @@ export async function incidenciasRoutes(app: FastifyInstance) {
       }
     })
 
-    // Notificar al autor si el comentario lo hace otro
     if (incidencia.autor.email !== user.email) {
       await sendEmail({
         to: incidencia.autor.email,
-        subject: `[Intranet] Nuevo comentario en tu incidencia: ${incidencia.titulo}`,
+        subject: `[Intranet] Nuevo comentario en: ${incidencia.titulo}`,
         html: `
           <h2>Nuevo comentario en tu incidencia</h2>
           <p><strong>Incidencia:</strong> ${incidencia.titulo}</p>
@@ -202,15 +198,13 @@ export async function incidenciasRoutes(app: FastifyInstance) {
     return reply.code(201).send(comentario)
   })
 
-  // ── Estadísticas para el panel admin ─────────────────────────────────────
+  // ── Estadísticas (solo admin) ─────────────────────────────────────────────
   app.get('/stats/resumen', { preHandler: requireAdmin }, async (_req, reply) => {
-    const [total, porEstado, porCategoria, porPrioridad] = await Promise.all([
+    const [total, porEstado, porPrioridad] = await Promise.all([
       prisma.incidencia.count(),
       prisma.incidencia.groupBy({ by: ['estado'], _count: true }),
-      prisma.incidencia.groupBy({ by: ['categoria'], _count: true }),
       prisma.incidencia.groupBy({ by: ['prioridad'], _count: true }),
     ])
-
-    return reply.send({ total, porEstado, porCategoria, porPrioridad })
+    return reply.send({ total, porEstado, porPrioridad })
   })
 }
