@@ -1,4 +1,3 @@
-# ── Fase 1: Build ─────────────────────────────────────────────────────────────
 FROM node:22-alpine AS builder
 
 WORKDIR /app
@@ -13,7 +12,6 @@ COPY src ./src/
 RUN npm run db:generate
 RUN npm run build
 
-# ── Fase 2: Producción ────────────────────────────────────────────────────────
 FROM node:22-alpine AS runner
 
 WORKDIR /app
@@ -30,5 +28,4 @@ COPY prisma ./prisma/
 
 EXPOSE 3000
 
-# Ejecutar migraciones y arrancar
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy && npx prisma db seed && node dist/index.js"]

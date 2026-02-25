@@ -8,7 +8,7 @@ RUN npm ci
 
 COPY svelte.config.js vite.config.ts tsconfig.json ./
 COPY src ./src/
-COPY static ./static/ 2>/dev/null || true
+COPY static ./static/ 
 
 RUN npm run build
 
