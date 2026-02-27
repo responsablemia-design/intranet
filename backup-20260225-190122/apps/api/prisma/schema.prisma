@@ -1,0 +1,160 @@
+// Prisma schema - Intranet IES Félix de Azara
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Roles ─────────────────────────────────────────────────────────────────────
+enum Role {
+  ADMIN
+  PROFESOR
+  ALUMNO
+}
+
+// ── Usuarios ──────────────────────────────────────────────────────────────────
+model User {
+  id            String       @id @default(cuid())
+  googleId      String       @unique
+  email         String       @unique
+  name          String
+  avatar        String?
+  role          Role         @default(PROFESOR)
+  active        Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  incidenciasAbiertas  Incidencia[] @relation("Autor")
+  incidenciasAsignadas Incidencia[] @relation("Asignado")
+  comentarios          Comentario[]
+
+  @@map("users")
+}
+
+// ── Espacios ──────────────────────────────────────────────────────────────────
+enum TipoEspacio {
+  AULA_ORDINARIA      // 1 PC profesor + proyector/pantalla
+  AULA_INFORMATICA    // Múltiples PCs alumnos
+  LABORATORIO
+  SALA_PROFESORES
+  BIBLIOTECA
+  DEPARTAMENTO
+  DESPACHO
+  CARRO_PORTATILES    // Carro móvil de portátiles
+  OTRO
+}
+
+model Espacio {
+  id          String      @id @default(cuid())
+  codigo      String      @unique  // "108", "CARRO-1", "LAB-BG"
+  nombre      String               // "Aula 108", "Carro Portátiles P1"
+  planta      Int?                 // 0, 1, 2 — null para espacios móviles
+  tipo        TipoEspacio @default(OTRO)
+  activo      Boolean     @default(true)
+  notas       String?
+
+  equipos     Equipo[]
+  incidencias Incidencia[]
+
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@map("espacios")
+}
+
+// ── Equipos ───────────────────────────────────────────────────────────────────
+enum TipoEquipo {
+  PC
+  PORTATIL
+  PANTALLA_INTERACTIVA
+  PROYECTOR
+  IMPRESORA
+  RED               // Router, switch, punto de acceso WiFi
+  CLIMATIZACION
+  MOBILIARIO
+  OTRO
+}
+
+enum EstadoEquipo {
+  OPERATIVO
+  AVERIADO
+  BAJA
+}
+
+model Equipo {
+  id           String       @id @default(cuid())
+  nombre       String                // "PC Profesor", "Portátil 07", "Proyector"
+  tipo         TipoEquipo
+  estado       EstadoEquipo @default(OPERATIVO)
+  numeroSerie  String?
+  notas        String?
+
+  espacioId    String
+  espacio      Espacio      @relation(fields: [espacioId], references: [id])
+
+  incidencias  Incidencia[]
+
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@map("equipos")
+}
+
+// ── Incidencias ───────────────────────────────────────────────────────────────
+enum EstadoIncidencia {
+  ABIERTA
+  EN_PROCESO
+  RESUELTA
+  CERRADA
+}
+
+enum PrioridadIncidencia {
+  BAJA
+  MEDIA
+  ALTA
+  URGENTE
+}
+
+model Incidencia {
+  id          String              @id @default(cuid())
+  titulo      String
+  descripcion String              @db.Text
+  estado      EstadoIncidencia    @default(ABIERTA)
+  prioridad   PrioridadIncidencia @default(MEDIA)
+
+  espacioId   String
+  espacio     Espacio             @relation(fields: [espacioId], references: [id])
+
+  equipoId    String?
+  equipo      Equipo?             @relation(fields: [equipoId], references: [id])
+
+  autorId     String
+  autor       User                @relation("Autor", fields: [autorId], references: [id])
+
+  asignadoId  String?
+  asignado    User?               @relation("Asignado", fields: [asignadoId], references: [id])
+
+  comentarios Comentario[]
+
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  resolvedAt  DateTime?
+
+  @@map("incidencias")
+}
+
+model Comentario {
+  id           String     @id @default(cuid())
+  contenido    String     @db.Text
+  incidenciaId String
+  incidencia   Incidencia @relation(fields: [incidenciaId], references: [id], onDelete: Cascade)
+  autorId      String
+  autor        User       @relation(fields: [autorId], references: [id])
+  createdAt    DateTime   @default(now())
+
+  @@map("comentarios")
+}

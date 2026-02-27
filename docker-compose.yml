@@ -1,30 +1,30 @@
 services:
 
   # ── Reverse proxy + SSL automático ──────────────────────────────────────────
-  traefik:
-    image: traefik:v3.3
-    container_name: traefik
-    restart: unless-stopped
-    command:
-      - --api.dashboard=true
-      - --providers.docker=true
-      - --providers.docker.exposedbydefault=false
-      - --entrypoints.web.address=:80
-      - --entrypoints.websecure.address=:443
-      - --entrypoints.web.http.redirections.entrypoint.to=websecure
-      - --entrypoints.web.http.redirections.entrypoint.scheme=https
-      - --certificatesresolvers.letsencrypt.acme.httpchallenge=true
-      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
-      - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}
-      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./traefik/letsencrypt:/letsencrypt
-    networks:
-      - intranet
+#  traefik:
+#   image: traefik:v2.10
+#   container_name: traefik
+#    restart: unless-stopped
+#    command:
+#      - --api.dashboard=true
+#      - --providers.docker=true
+#      - --providers.docker.exposedbydefault=false
+#      - --entrypoints.web.address=:80
+#      - --entrypoints.websecure.address=:443
+#      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+#      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+#      - --certificatesresolvers.letsencrypt.acme.httpchallenge=true
+#      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
+#      - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}
+#      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+#    ports:
+#      - "80:80"
+#      - "443:443"
+#    volumes:
+#      - /var/run/docker.sock:/var/run/docker.sock:ro
+#      - ./traefik/letsencrypt:/letsencrypt
+#    networks:
+#      - intranet
 
   # ── Base de datos ────────────────────────────────────────────────────────────
   mariadb:
@@ -63,6 +63,8 @@ services:
       dockerfile: Dockerfile
     container_name: intranet-api
     restart: unless-stopped
+    ports:
+      - "3000:3000"
     environment:
       NODE_ENV: production
       DATABASE_URL: mysql://${DB_USER}:${DB_PASSWORD}@mariadb:3306/${DB_NAME}
@@ -70,9 +72,12 @@ services:
       SESSION_SECRET: ${SESSION_SECRET}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
-      GOOGLE_CALLBACK_URL: https://intranet.${DOMAIN}/auth/google/callback
       ALLOWED_DOMAIN: ${DOMAIN}
-      FRONTEND_URL: https://intranet.${DOMAIN}
+      GOOGLE_CALLBACK_URL: http://localhost:3000/auth/google/callback
+      FRONTEND_URL: http://localhost:3001
+      PUBLIC_API_URL: http://localhost:3000
+
+
     depends_on:
       mariadb:
         condition: service_healthy
@@ -94,8 +99,12 @@ services:
       dockerfile: Dockerfile
     container_name: intranet-web
     restart: unless-stopped
+    ports:
+      - "3001:3001"
     environment:
-      PUBLIC_API_URL: https://intranet.${DOMAIN}
+      NODE_ENV: production
+      PUBLIC_API_URL: http://172.30.200.240:3000
+      API_URL: http://api:3000
     depends_on:
       - api
     networks:

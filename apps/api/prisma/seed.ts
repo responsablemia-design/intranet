@@ -1,17 +1,17 @@
-import { PrismaClient, TipoEspacio } from '@prisma/client'
+import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
 
-function tipoDesdeCSV(tipo: string, nombre: string): TipoEspacio {
-  if (tipo === 'Aula ordinaria') return TipoEspacio.AULA_ORDINARIA
+function tipoDesdeCSV(tipo: string, nombre: string): string {
+  if (tipo === 'Aula ordinaria') return 'AULA_ORDINARIA'
   const n = nombre.toLowerCase()
-  if (n.includes('biblioteca')) return TipoEspacio.BIBLIOTECA
-  if (n.includes('sala de profesores')) return TipoEspacio.SALA_PROFESORES
-  if (n.includes('departamento')) return TipoEspacio.DEPARTAMENTO
+  if (n.includes('biblioteca')) return 'BIBLIOTECA'
+  if (n.includes('sala de profesores')) return 'SALA_PROFESORES'
+  if (n.includes('departamento')) return 'DEPARTAMENTO'
   if (n.includes('despacho') || n.includes('secretar') || n.includes('direcci') ||
       n.includes('jefatura') || n.includes('conserjer') || n.includes('reprograf') ||
-      n.includes('p.i.e.e') || n.includes('salón')) return TipoEspacio.DESPACHO
-  return TipoEspacio.OTRO  // aulas sin clasificar (laboratorios, informática...)
+      n.includes('p.i.e.e') || n.includes('salón')) return 'DESPACHO'
+  return 'OTRO'
 }
 
 const espaciosCSV = [
@@ -92,10 +92,11 @@ const espaciosCSV = [
   { planta: 2, codigo: '223', nombre: 'Aula 223', tipo: 'Aula ordinaria' },
   { planta: 2, codigo: '224', nombre: 'Aula 224', tipo: 'Aula ordinaria' },
   { planta: 2, codigo: 'DEP-ART', nombre: 'Departamento artes plásticas y visuales', tipo: '' },
-  // Carros de portátiles (móviles)
+  // Carros de portátiles (móviles) — 4 carros
   { planta: null, codigo: 'CARRO-1', nombre: 'Carro portátiles 1', tipo: '' },
   { planta: null, codigo: 'CARRO-2', nombre: 'Carro portátiles 2', tipo: '' },
   { planta: null, codigo: 'CARRO-3', nombre: 'Carro portátiles 3', tipo: '' },
+  { planta: null, codigo: 'CARRO-4', nombre: 'Carro portátiles 4', tipo: '' },
 ]
 
 async function main() {
@@ -105,8 +106,7 @@ async function main() {
 
   for (const e of espaciosCSV) {
     const tipo = tipoDesdeCSV(e.tipo, e.nombre)
-    // Ajustar tipo para carros
-    const tipoFinal = e.codigo.startsWith('CARRO') ? TipoEspacio.CARRO_PORTATILES : tipo
+    const tipoFinal = e.codigo.startsWith('CARRO') ? 'CARRO_PORTATILES' : tipo
 
     try {
       await prisma.espacio.upsert({
@@ -116,7 +116,7 @@ async function main() {
           codigo: e.codigo,
           nombre: e.nombre,
           planta: e.planta,
-          tipo: tipoFinal,
+          tipo: tipoFinal as any,
         }
       })
       creados++
@@ -129,7 +129,7 @@ async function main() {
 
   // Equipar automáticamente las aulas ordinarias con PC profesor + proyector
   const aulasOrdinarias = await prisma.espacio.findMany({
-    where: { tipo: TipoEspacio.AULA_ORDINARIA },
+    where: { tipo: 'AULA_ORDINARIA' as any },
     include: { equipos: true }
   })
 
